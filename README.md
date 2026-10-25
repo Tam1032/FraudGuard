@@ -27,7 +27,23 @@ Alert threshold set so that 2% of transactions are sent to analysts.
 | Logistic Regression (baseline) | _fill in_ | | | | |
 | LightGBM + SQL features + anomaly score | _fill in_ | | | | |
 
-Numbers come from `reports/metrics.json` after `make train`. Drift results are in
+Numbers come from `reports/metrics.json` after `make train`.
+
+### Feature iterations (LightGBM, same test period)
+
+| Version | Features added | PR-AUC | Precision @ 2% alerts | Recall @ 2% alerts |
+| --- | --- | --- | --- | --- |
+| v1 | SQL velocity and amount features, C/D/M subset, anomaly score | 0.342 | 0.521 | 0.336 |
+| v2 | + 120 deduplicated V columns, frequency encoding, account start-day from D4/D10/D15, more client aggregates | 0.340 | 0.487 | 0.334 |
+| v3 | Early-stopping fix (track PR-AUC only), start-day features and client-id frequency removed | _fill in_ | | |
+
+v1 and v2 stopped after a few trees (best iteration 3 in v2): early stopping also watched log-loss,
+which gets worse almost at once when the fraud class is weighted. The drift report flagged the
+start-day features (PSI above 0.8): they encode absolute dates, so test-period values never occur
+in training, and they were removed.
+
+Logistic Regression baseline (v1): PR-AUC 0.183. Drift over the production period (v1): no feature
+above PSI 0.02, but PR-AUC fell from 0.367 to 0.341, so input monitoring alone would have missed it. Drift results are in
 `reports/drift_summary.json` and `reports/drift_report.html`.
 
 ## Quick start
@@ -91,9 +107,16 @@ curl -X POST localhost:8000/score -H 'Content-Type: application/json' -d '{
   cannot compute it from a 30-day window and it drifts by construction.
 - **Client id (`uid`).** Card id alone mixes many people. `card1 + addr1 + (day - D1)` approximates
   one account, because D1 counts days since the account's first transaction.
-- **Imbalance.** About 3.5% of transactions are fraud. The model uses `scale_pos_weight`
-  instead of SMOTE: oversampling synthetic points in a 60-feature space with many missing
-  values adds noise and makes the pipeline slower without a clear gain.
+- **Fewer V columns.** Vesta's 339 V features come in groups of near-duplicates; one column per
+  group keeps most of the signal at a third of the memory.
+- **Frequency encoding.** How common a card, address or email domain is in the training period.
+  Fraud often comes from rare values. Learned on the training period only and saved with the model,
+  so the API uses the same mapping.
+- **Imbalance.** About 3.5% of transactions are fraud. No SMOTE: oversampling synthetic points
+  in a space with many missing values adds noise and slows the pipeline. PR-AUC and the alert
+  threshold only depend on the ranking, so class weighting is optional (`POS_WEIGHT=auto` to try it).
+- **Early stopping on PR-AUC only.** LightGBM also tracks log-loss by default and stops when any
+  metric stops improving; with class weighting that happened after 3 trees.
 - **Metrics.** Accuracy is meaningless here (96.5% by predicting "legit"). PR-AUC is the main
   metric; precision and recall are reported at the operating threshold.
 - **Threshold from an alert budget.** Analysts can only review so many cases. The threshold flags

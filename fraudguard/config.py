@@ -51,7 +51,9 @@ CATEGORICAL = ["ProductCD", "card4", "card6", "P_emaildomain", "R_emaildomain"] 
 
 # Frequency encoding: how common each value is in the training period. Fraud often
 # comes from rare cards, addresses and email domains.
-FREQ_COLUMNS = ["card1", "card2", "card3", "card5", "addr1", "P_emaildomain", "R_emaildomain", "uid"]
+# Not uid: most uids in later months are new, so training rows (always seen) and
+# test rows (mostly unseen, frequency 0) would follow different distributions.
+FREQ_COLUMNS = ["card1", "card2", "card3", "card5", "addr1", "P_emaildomain", "R_emaildomain"]
 
 # Columns produced by sql/features.sql that are not model inputs.
 NON_FEATURES = ["TransactionID", "isFraud", "TransactionDT", "uid"]

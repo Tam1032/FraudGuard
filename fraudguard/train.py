@@ -61,6 +61,7 @@ def main():
     con = features.load_history()
     df = features.compute_all(con)
     con.close()
+    df = df[df["isFraud"].notna()]  # skip transactions the API added to history (no label)
     train, valid, test = time_split(df)
     print(f"rows: train={len(train):,} valid={len(valid):,} test={len(test):,}")
 
@@ -99,7 +100,10 @@ def main():
 
     print("Training LightGBM...")
     with mlflow.start_run(run_name="lightgbm"):
-        pos_weight = (y_train == 0).sum() / max((y_train == 1).sum(), 1)
+        # POS_WEIGHT=auto weights fraud by the class ratio (about 27x); 1 = no weighting.
+        # PR-AUC and the alert threshold only use the ranking, so weighting is optional.
+        pw = os.getenv("POS_WEIGHT", "1")
+        pos_weight = (y_train == 0).sum() / max((y_train == 1).sum(), 1) if pw == "auto" else float(pw)
         params = dict(
             n_estimators=N_ESTIMATORS,
             learning_rate=0.03,
@@ -110,6 +114,10 @@ def main():
             colsample_bytree=0.5,
             reg_lambda=1.0,
             scale_pos_weight=pos_weight,
+            # Only track PR-AUC. With the default extra log-loss metric, early stopping
+            # halts as soon as log-loss stops improving, which with class weighting is
+            # after a handful of trees.
+            metric="average_precision",
             random_state=SEED,
             n_jobs=-1,
             verbose=-1,
@@ -117,8 +125,7 @@ def main():
         model = lgb.LGBMClassifier(**params).fit(
             X_train, y_train,
             eval_X=(X_valid,), eval_y=(y_valid,),
-            eval_metric="average_precision",
-            callbacks=[lgb.early_stopping(100, verbose=False), lgb.log_evaluation(200)],
+            callbacks=[lgb.early_stopping(200, verbose=False), lgb.log_evaluation(200)],
         )
         s_valid = model.predict_proba(X_valid)[:, 1]
         s_test = model.predict_proba(X_test)[:, 1]

@@ -24,12 +24,6 @@ SELECT
     TransactionAmt - floor(TransactionAmt)                  AS amt_cents,
     CAST(P_emaildomain = R_emaildomain AS INTEGER)          AS email_match,
 
-    -- D4/D10/D15 count days since some past event; subtracting them from the
-    -- current day gives a date that stays constant for one account.
-    floor(TransactionDT / 86400) - D4                       AS D4_start_day,
-    floor(TransactionDT / 86400) - D10                      AS D10_start_day,
-    floor(TransactionDT / 86400) - D15                      AS D15_start_day,
-
     -- Velocity: how many transactions this client made recently.
     count(*) OVER w_1h                                      AS uid_tx_1h,
     count(*) OVER w_24h                                     AS uid_tx_24h,
