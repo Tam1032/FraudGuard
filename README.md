@@ -24,8 +24,8 @@ Alert threshold set so that 2% of transactions are sent to analysts.
 
 | Model | PR-AUC | ROC-AUC | Precision @ alert | Recall @ alert | Recall @ precision ≥ 0.5 |
 | --- | --- | --- | --- | --- | --- |
-| Logistic Regression (baseline) | _fill in_ | | | | |
-| LightGBM + SQL features + anomaly score | _fill in_ | | | | |
+| Logistic Regression (baseline) | 0.215 | 0.833 | 0.341 | 0.326 | 0.024 |
+| LightGBM + SQL features + anomaly score | **0.544** | **0.906** | **0.768** | **0.385** | **0.534** |
 
 Numbers come from `reports/metrics.json` after `make train`.
 
@@ -35,16 +35,15 @@ Numbers come from `reports/metrics.json` after `make train`.
 | --- | --- | --- | --- | --- |
 | v1 | SQL velocity and amount features, C/D/M subset, anomaly score | 0.342 | 0.521 | 0.336 |
 | v2 | + 120 deduplicated V columns, frequency encoding, account start-day from D4/D10/D15, more client aggregates | 0.340 | 0.487 | 0.334 |
-| v3 | Early-stopping fix (track PR-AUC only), start-day features and client-id frequency removed | _fill in_ | | |
+| v3 | Early-stopping fix (track PR-AUC only), start-day features and client-id frequency removed | **0.544** | **0.768** | **0.385** |
 
 v1 and v2 stopped after a few trees (best iteration 3 in v2): early stopping also watched log-loss,
 which gets worse almost at once when the fraud class is weighted. The drift report flagged the
 start-day features (PSI above 0.8): they encode absolute dates, so test-period values never occur
 in training, and they were removed.
 
-Logistic Regression baseline (v1): PR-AUC 0.183. Drift over the production period (v1): no feature
-above PSI 0.02, but PR-AUC fell from 0.367 to 0.341, so input monitoring alone would have missed it. Drift results are in
-`reports/drift_summary.json` and `reports/drift_report.html`.
+About 3.5% of transactions are fraud, so a random ranking would score a PR-AUC of about 0.035.
+v3 still improved slightly at the 3,000-tree cap; `N_ESTIMATORS=6000` may add a little more.
 
 ## Quick start
 
@@ -75,25 +74,29 @@ Score a transaction:
 curl -X POST localhost:8000/score -H 'Content-Type: application/json' -d '{
   "TransactionID": 4000001, "TransactionDT": 15811200, "TransactionAmt": 249.0,
   "ProductCD": "W", "card1": 13926, "card4": "visa", "card6": "debit",
-  "addr1": 315, "P_emaildomain": "gmail.com", "D1": 14
+  "addr1": 315, "P_emaildomain": "gmail.com", "C1": 3, "C13": 5, "D1": 14, "D15": 14
 }'
 ```
+
+Response from the v3 model:
 
 ```json
 {
   "transaction_id": 4000001,
-  "fraud_probability": 0.031,
-  "risk_score": 31,
+  "fraud_probability": 0.004224,
+  "risk_score": 4,
   "is_alert": false,
-  "threshold": 0.27,
+  "threshold": 0.306739,
   "reasons": [
-    {"feature": "uid_tx_1h", "value": 3, "contribution": 0.41},
-    {"feature": "amt_to_uid_mean_30d", "value": 4.2, "contribution": 0.22}
+    {"feature": "C14", "value": null, "contribution": 0.7572},
+    {"feature": "TransactionAmt", "value": 249.0, "contribution": 0.3734},
+    {"feature": "V294", "value": null, "contribution": 0.3196}
   ]
 }
 ```
 
-(Example response shape; values depend on the trained model.)
+`reasons` are the three features that pushed the score up most (SHAP, log-odds). Fields left out of
+the request are treated as missing, which is why `C14` and `V294` show `null` here.
 
 ## Design decisions
 
