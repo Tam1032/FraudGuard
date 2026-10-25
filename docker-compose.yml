@@ -1,0 +1,26 @@
+# docker compose run --rm train   -> train + drift report (writes models/, reports/, mlflow.db)
+# docker compose up api mlflow    -> scoring API on :8000, MLflow UI on :5000
+services:
+  api:
+    build: .
+    ports: ["8000:8000"]
+    volumes:
+      - ./models:/app/models:ro
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+
+  train:
+    build: .
+    profiles: ["train"]
+    command: sh -c "python -m fraudguard.train && python -m fraudguard.drift"
+    volumes:
+      - .:/app
+
+  mlflow:
+    build: .
+    ports: ["5000:5000"]
+    command: mlflow ui --backend-store-uri sqlite:////app/mlflow.db --host 0.0.0.0 --port 5000
+    volumes:
+      - .:/app
