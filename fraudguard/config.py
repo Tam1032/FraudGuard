@@ -23,18 +23,35 @@ VALID_END = 0.80
 # this share of validation traffic is flagged.
 ALERT_RATE = float(os.getenv("ALERT_RATE", "0.02"))
 
-# Raw columns read from the CSV. V1..V339 are left out on purpose: they add little
-# on top of the behavioural features and make the pipeline much slower.
+# A reduced set of V columns: Vesta's 339 engineered features come in groups of
+# near-duplicates (same missing pattern, correlation > 0.75); one column per group
+# keeps most of the signal at a third of the memory.
+V_COLUMNS = [f"V{i}" for i in (
+    1, 3, 4, 6, 8, 11, 13, 14, 17, 20, 23, 26, 27, 30, 36, 37, 40, 41, 44, 47, 48, 54, 56, 59,
+    62, 65, 67, 68, 70, 76, 78, 80, 82, 86, 88, 89, 91, 107, 108, 111, 115, 117, 120, 121, 123,
+    124, 127, 129, 130, 136, 138, 139, 142, 147, 156, 160, 162, 165, 166, 169, 171, 173, 175,
+    176, 178, 180, 182, 185, 187, 188, 198, 203, 205, 207, 209, 210, 215, 218, 220, 221, 223,
+    224, 226, 228, 229, 234, 235, 238, 240, 250, 252, 253, 257, 258, 260, 261, 264, 266, 267,
+    271, 274, 277, 281, 283, 284, 285, 286, 289, 291, 294, 296, 297, 301, 303, 305, 307, 309,
+    310, 314, 320,
+)]
+
+# Raw columns read from the CSV.
 RAW_COLUMNS = (
     ["TransactionID", "isFraud", "TransactionDT", "TransactionAmt", "ProductCD"]
     + [f"card{i}" for i in range(1, 7)]
-    + ["addr1", "addr2", "dist1", "P_emaildomain", "R_emaildomain"]
+    + ["addr1", "addr2", "dist1", "dist2", "P_emaildomain", "R_emaildomain"]
     + [f"C{i}" for i in range(1, 15)]
-    + [f"D{i}" for i in (1, 2, 3, 4, 10, 15)]
-    + [f"M{i}" for i in (4, 5, 6)]
+    + [f"D{i}" for i in range(1, 16)]
+    + [f"M{i}" for i in range(1, 10)]
+    + V_COLUMNS
 )
 
-CATEGORICAL = ["ProductCD", "card4", "card6", "P_emaildomain", "R_emaildomain", "M4", "M5", "M6"]
+CATEGORICAL = ["ProductCD", "card4", "card6", "P_emaildomain", "R_emaildomain"] + [f"M{i}" for i in range(1, 10)]
+
+# Frequency encoding: how common each value is in the training period. Fraud often
+# comes from rare cards, addresses and email domains.
+FREQ_COLUMNS = ["card1", "card2", "card3", "card5", "addr1", "P_emaildomain", "R_emaildomain", "uid"]
 
 # Columns produced by sql/features.sql that are not model inputs.
 NON_FEATURES = ["TransactionID", "isFraud", "TransactionDT", "uid"]

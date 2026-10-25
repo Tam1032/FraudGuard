@@ -68,13 +68,16 @@ def generate(rows: int, seed: int = 0) -> pd.DataFrame:
     df["D1"] = np.floor(dt / DAY + card_start[card])
     new_acct = fraud & (rng.random(rows) < 0.3)
     df.loc[new_acct, "D1"] = rng.integers(0, 3, new_acct.sum())
-    for d in (2, 3, 4, 10, 15):
+    df["dist2"] = np.where(rng.random(rows) < 0.9, np.nan, rng.exponential(50, rows))
+    for d in range(2, 16):
         df[f"D{d}"] = np.where(rng.random(rows) < 0.3, np.nan, rng.integers(0, 500, rows))
-    for m in (4, 5, 6):
+    for m in range(1, 10):
         df[f"M{m}"] = rng.choice(["T", "F", None], rows) if m != 4 else rng.choice(["M0", "M1", "M2", None], rows)
-    for v in range(1, 6):  # the real file has V1..V339; the pipeline ignores them
-        df[f"V{v}"] = rng.random(rows)
-    return df
+    v_cols = {
+        f"V{v}": np.where(rng.random(rows) < 0.3, np.nan, rng.poisson(np.where(fraud, 1.5, 1.0), rows)).astype(float)
+        for v in range(1, 340)
+    }
+    return pd.concat([df, pd.DataFrame(v_cols)], axis=1)
 
 
 if __name__ == "__main__":

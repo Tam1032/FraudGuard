@@ -21,6 +21,7 @@ class Scorer:
         self.threshold = meta["threshold"]
         self.booster = lgb.Booster(model_file=str(model_dir / "lgbm.txt"))
         self.iforest = joblib.load(model_dir / "iforest.joblib")
+        self.freq_maps = joblib.load(model_dir / "freq_maps.joblib")
         self.explainer = Explainer(self.booster)
         self.con = duckdb.connect(str(db_path))
         self.record_history = record_history
@@ -31,7 +32,7 @@ class Scorer:
             row = features.compute_one(self.con, txn)
             if self.record_history:
                 features.append_to_history(self.con, txn)
-        X = features.to_model_frame(row, self.categories)
+        X = features.to_model_frame(features.add_frequency(row, self.freq_maps), self.categories)
         X["iforest_score"] = -self.iforest.score_samples(X[self.iforest_cols].fillna(-999))
         X = X[self.features]
         prob = float(self.booster.predict(X)[0])

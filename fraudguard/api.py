@@ -6,6 +6,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from fraudguard.scorer import Scorer
@@ -27,7 +28,21 @@ app = FastAPI(title="FraudGuard", version="0.1.0", lifespan=lifespan)
 class Transaction(BaseModel):
     """Raw IEEE-CIS transaction fields. Extra columns (C1..C14, D*, M*) are accepted as-is."""
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="allow", json_schema_extra={"examples": [{
+        "TransactionID": 4000001,
+        "TransactionDT": 15811200,
+        "TransactionAmt": 249.0,
+        "ProductCD": "W",
+        "card1": 13926,
+        "card4": "visa",
+        "card6": "debit",
+        "addr1": 315,
+        "P_emaildomain": "gmail.com",
+        "C1": 3,
+        "C13": 5,
+        "D1": 14,
+        "D15": 14,
+    }]})
 
     TransactionID: int
     TransactionDT: int = Field(description="Seconds from the dataset's reference time")
@@ -58,6 +73,11 @@ class ScoreResponse(BaseModel):
     is_alert: bool
     threshold: float
     reasons: list[Reason]
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    return RedirectResponse("/docs")
 
 
 @app.get("/health")

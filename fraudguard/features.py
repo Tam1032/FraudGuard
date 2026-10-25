@@ -73,6 +73,19 @@ def append_to_history(con: duckdb.DuckDBPyConnection, txn: dict) -> None:
     con.execute("INSERT INTO transactions SELECT * FROM new_tx")
 
 
+def frequency_maps(df: pd.DataFrame) -> dict:
+    """Share of rows holding each value, learned from the training period only."""
+    return {c: df[c].astype(str).value_counts(normalize=True).to_dict() for c in config.FREQ_COLUMNS}
+
+
+def add_frequency(df: pd.DataFrame, maps: dict) -> pd.DataFrame:
+    """Add <col>_freq columns; values never seen in training get 0."""
+    df = df.copy()
+    for c, m in maps.items():
+        df[f"{c}_freq"] = df[c].astype(str).map(m).fillna(0.0).astype("float64")
+    return df
+
+
 def to_model_frame(df: pd.DataFrame, categories: dict | None = None) -> pd.DataFrame:
     """Drop id/label columns and set categorical dtypes the way LightGBM expects."""
     X = df.drop(columns=[c for c in config.NON_FEATURES if c in df.columns]).copy()
@@ -81,7 +94,6 @@ def to_model_frame(df: pd.DataFrame, categories: dict | None = None) -> pd.DataF
             X[col] = pd.Categorical(X[col], categories=categories[col])
         else:
             X[col] = X[col].astype("category")
-    for col in X.columns:
-        if col not in config.CATEGORICAL:
-            X[col] = pd.to_numeric(X[col], errors="coerce").astype("float64")
-    return X
+    numeric = [c for c in X.columns if c not in config.CATEGORICAL]
+    X[numeric] = X[numeric].apply(pd.to_numeric, errors="coerce").astype("float32")
+    return X.copy()  # one consolidated block; avoids pandas fragmentation warnings

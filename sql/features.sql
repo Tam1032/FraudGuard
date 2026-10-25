@@ -24,6 +24,12 @@ SELECT
     TransactionAmt - floor(TransactionAmt)                  AS amt_cents,
     CAST(P_emaildomain = R_emaildomain AS INTEGER)          AS email_match,
 
+    -- D4/D10/D15 count days since some past event; subtracting them from the
+    -- current day gives a date that stays constant for one account.
+    floor(TransactionDT / 86400) - D4                       AS D4_start_day,
+    floor(TransactionDT / 86400) - D10                      AS D10_start_day,
+    floor(TransactionDT / 86400) - D15                      AS D15_start_day,
+
     -- Velocity: how many transactions this client made recently.
     count(*) OVER w_1h                                      AS uid_tx_1h,
     count(*) OVER w_24h                                     AS uid_tx_24h,
@@ -35,6 +41,10 @@ SELECT
     TransactionAmt / nullif(avg(TransactionAmt) OVER w_30d, 0) AS amt_to_uid_mean_30d,
     (TransactionAmt - avg(TransactionAmt) OVER w_30d)
         / nullif(stddev_samp(TransactionAmt) OVER w_30d, 0) AS amt_zscore_30d,
+    stddev_samp(TransactionAmt) OVER w_30d                  AS uid_amt_std_30d,
+    avg(dist1) OVER w_30d                                   AS uid_dist1_mean_30d,
+    avg(C13) OVER w_30d                                     AS uid_c13_mean_30d,
+    avg(D15) OVER w_30d                                     AS uid_d15_mean_30d,
 
     -- Timing and novelty.
     TransactionDT - lag(TransactionDT) OVER w_all          AS secs_since_prev_tx,

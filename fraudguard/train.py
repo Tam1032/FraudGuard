@@ -64,6 +64,9 @@ def main():
     train, valid, test = time_split(df)
     print(f"rows: train={len(train):,} valid={len(valid):,} test={len(test):,}")
 
+    freq_maps = features.frequency_maps(train)
+    train, valid, test = (features.add_frequency(d, freq_maps) for d in (train, valid, test))
+
     X_train = features.to_model_frame(train)
     categories = {c: list(X_train[c].cat.categories) for c in config.CATEGORICAL}
     X_valid = features.to_model_frame(valid, categories)
@@ -124,9 +127,11 @@ def main():
         mlflow.log_params({**{k: v for k, v in params.items() if k != "n_jobs"},
                            "best_iteration": model.best_iteration_, "alert_rate": config.ALERT_RATE})
 
+        print(f"LightGBM best iteration: {model.best_iteration_}")
         booster = model.booster_
         booster.save_model(str(config.MODEL_DIR / "lgbm.txt"), num_iteration=model.best_iteration_)
         joblib.dump(iforest, config.MODEL_DIR / "iforest.joblib")
+        joblib.dump(freq_maps, config.MODEL_DIR / "freq_maps.joblib")
         meta = {
             "features": list(X_train.columns),
             "categorical": config.CATEGORICAL,
